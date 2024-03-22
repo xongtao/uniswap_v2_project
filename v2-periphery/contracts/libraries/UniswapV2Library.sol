@@ -116,9 +116,9 @@ library UniswapV2Library {
         );
         uint numerator = reserveIn.mul(amountOut).mul(1000);
         uint denominator = reserveOut.sub(amountOut).mul(997);
-        // rA * aB = rB * aA 已知aB,rA,rB,反求aA，则不考虑rA的变化
+        // rA * aB = rB * aA    已知aB,rA,rB,反求aA，则不考虑rA的变化  求谁不考虑谁的变化
         // aA = ( rA * aB * 1000 ) / (new_rB),new_rB = (rB * 1000 - aB * 997);
-        // amountIn = ( reserveIn * amountOut *  1000 ) / ( ( reserveOut - amountOut ) * 997 )
+        // amountIn = ( reserveIn * amountOut *  1000 ) / ( reserveOut*1000 - amountB * 997 )
         amountIn = (numerator / denominator).add(1);
     }
 
@@ -129,11 +129,15 @@ library UniswapV2Library {
         uint amountIn,
         address[] memory path
     ) internal view returns (uint[] memory amounts) {
+        //判断path路径为多个
         require(path.length >= 2, "UniswapV2Library: INVALID_PATH");
+        //amounts数组的长度为path.length
         amounts = new uint[](path.length);
+        //输入数额 等于 amounts[0]
         amounts[0] = amountIn;
+        //获取每个pair合约所对应的储备量
         for (uint i; i < path.length - 1; i++) {
-            (uint reserveIn, uint reserveOut) = getReserves(
+            (uint reserveIn, uint reserveOFut) = getReserves(
                 factory,
                 path[i],
                 path[i + 1]
@@ -149,15 +153,21 @@ library UniswapV2Library {
         uint amountOut,
         address[] memory path
     ) internal view returns (uint[] memory amounts) {
+        //判断path路径为多个
         require(path.length >= 2, "UniswapV2Library: INVALID_PATH");
+        //amounts数组的长度为path.length
         amounts = new uint[](path.length);
+        //amounts数组的最后一个为amountOut 
         amounts[amounts.length - 1] = amountOut;
+        //从最后一个pair合约往前得到对应的Reserve
         for (uint i = path.length - 1; i > 0; i--) {
             (uint reserveIn, uint reserveOut) = getReserves(
                 factory,
                 path[i - 1],
                 path[i]
             );
+            //从后往前调用getAmountIn 
+            //获得到的amounts在赋值到前面一位
             amounts[i - 1] = getAmountIn(amounts[i], reserveIn, reserveOut);
         }
     }

@@ -295,24 +295,42 @@ contract UniswapV2Router01 is IUniswapV2Router01 {
     }
 
     // **** SWAP ****
-    // 要求初始金额已发送至第一对
-
+    // 要求初始金额已发送至第一对pair合约中
+    /**
+        @dev 私有的交换方法
+        @param amounts 填入amounts数组和
+     */
     
     function _swap(
         uint[] memory amounts,
         address[] memory path,
         address _to
     ) private {
+        //遍历path路径 ，unit i 默认i 为0； 
         for (uint i; i < path.length - 1; i++) {
+            //确认输入token ,与 输出token 
             (address input, address output) = (path[i], path[i + 1]);
+            //将input token 与 output token 排序，得到与pair合约调用相同的顺序,确保交换方向正确
+            //用token0去交换所需代币 只获取其中一边的地址，另一边则为0；
             (address token0, ) = UniswapV2Library.sortTokens(input, output);
-            uint amountOut = amounts[i + 1];
+            //获取需要交换出的 output token 的数量 
+            uint amountOut = maounts[i + 1];
+            //如果input 恰好是 token0 ，那么amountOut 就赋值给amount1Out另一边， amount0Ount就为0 
+            //这样就会判断 使用 input 交换 output
+            //反之如果input 不是 token0,那么output是 token0 , 我们要拿去转化的代币在output的一边
+            // 我们需要将 amount1put设置为0 ，amountOut 就会赋值给amount0Out，
+            // 这样合约就会判断 用output去换input 
             (uint amount0Out, uint amount1Out) = input == token0
                 ? (uint(0), amountOut)
                 : (amountOut, uint(0));
-            address to = i < path.length - 2
+
+            //判断是否为交换路径最后一次 如果是最后一次 交换后收款地址直接为_to
+            //如果不是 交易后收款地址则为下一个交易对的pair合约地址
+            address to = i < path.length -  2
                 ? UniswapV2Library.pairFor(factory, output, path[i + 2])
                 : _to;
+            //调用pair合约进行交换，查看amount0Out和amount1Out取出数额哪个不为0；
+            //从而最终输出的是哪边token
             IUniswapV2Pair(UniswapV2Library.pairFor(factory, input, output))
                 .swap(amount0Out, amount1Out, to, new bytes(0));
         }
@@ -330,35 +348,41 @@ contract UniswapV2Router01 is IUniswapV2Router01 {
         address to,
         uint deadline
     ) external override ensure(deadline) returns (uint[] memory amounts) {
+        //获取到能获得 最终token的数量 
         amounts = UniswapV2Library.getAmountsOut(factory, amountIn, path);
+        //确认数组的最后一个输出数额 >= 最小输出数额
         require(
             amounts[amounts.length - 1] >= amountOutMin,
             "UniswapV2Router: INSUFFICIENT_OUTPUT_AMOUNT"
         );
+        //将path[0],amount[0]的token从调用者账户发送到路径0，1的pair合约
         TransferHelper.safeTransferFrom(
             path[0],
             msg.sender,
             UniswapV2Library.pairFor(factory, path[0], path[1]),
             amounts[0]
         );
+        //调用私有_swap方法进行数组遍历的swap
         _swap(amounts, path, to);
     }
     
     /**
-        @dev 使用尽量少的token交换精确的token 给定输出 求输入
+        @dev 使用尽量少的token交换 具体数额的token  给定输出 求输入
      */
     function swapTokensForExactTokens(
-        uint amountOut,
-        uint amountInMax,
+        uint amountOut, //限定输出
+        uint amountInMax,  //最大输入数额
         address[] calldata path,
         address to,
         uint deadline
     ) external override ensure(deadline) returns (uint[] memory amounts) {
         amounts = UniswapV2Library.getAmountsIn(factory, amountOut, path);
+        //确保最终输入数额 小于 预期最大值
         require(
             amounts[0] <= amountInMax,
             "UniswapV2Router: EXCESSIVE_INPUT_AMOUNT"
         );
+        //向 path[0],path[1]的pair合约 发送数量为amounts[0]的token path[0] 代币
         TransferHelper.safeTransferFrom(
             path[0],
             msg.sender,
@@ -369,7 +393,7 @@ contract UniswapV2Router01 is IUniswapV2Router01 {
     }
 
     /** 
-        @dev 根据精确的eth交换token  给定输入ETH 求输出
+        @dev 根据精确的eth交换token  给定精确的ETH输入  求token的输出
      */
     function swapExactETHForTokens(
         uint amountOutMin,
@@ -382,25 +406,31 @@ contract UniswapV2Router01 is IUniswapV2Router01 {
         override
         ensure(deadline)
         returns (uint[] memory amounts)
-    {
+    {   
+        //确认第一个路径为WETH
         require(path[0] == WETH, "UniswapV2Router: INVALID_PATH");
+        //经过getAmountsOut得到amounts  
         amounts = UniswapV2Library.getAmountsOut(factory, msg.value, path);
+        //确保最后的一个amounts >= 预期最小获得数量
         require(
             amounts[amounts.length - 1] >= amountOutMin,
             "UniswapV2Router: INSUFFICIENT_OUTPUT_AMOUNT"
         );
+        //将数额amount[0] 的ETH 发送到weth合约
         IWETH(WETH).deposit{value: amounts[0]}();
+        //可以发送从WETH合约发送WETH发送到path[0],path[1]所对应的pair合约
         assert(
             IWETH(WETH).transfer(
                 UniswapV2Library.pairFor(factory, path[0], path[1]),
                 amounts[0]
             )
         );
+        //发送后 到pair合约就可以执行私有方法_swap 
         _swap(amounts, path, to);
     }
 
     /**
-        @dev 使用尽量少的token交换精确的ETH  给定ETH输出 求输入
+        @dev 使用尽量少的token交换精确的ETH  给定精确的ETH输出 求token的输入
      */
     function swapTokensForExactETH(
         uint amountOut,
@@ -409,25 +439,32 @@ contract UniswapV2Router01 is IUniswapV2Router01 {
         address to,
         uint deadline
     ) external override ensure(deadline) returns (uint[] memory amounts) {
+        //从最后一个path[path.length]查看最后一个路径是否为WETH；
         require(path[path.length - 1] == WETH, "UniswapV2Router: INVALID_PATH");
+        //调用从后往前求amounts的方法，求第一个token的数额；
         amounts = UniswapV2Library.getAmountsIn(factory, amountOut, path);
+        //确保最后的amounts小于预期的amountInMax
         require(
             amounts[0] <= amountInMax,
             "UniswapV2Router: EXCESSIVE_INPUT_AMOUNT"
         );
+        //将数量为amounts[0]的path[0] token 发送到path[0],path[1]所对应的pair合约开始进行_swap
         TransferHelper.safeTransferFrom(
             path[0],
             msg.sender,
             UniswapV2Library.pairFor(factory, path[0], path[1]),
             amounts[0]
         );
+        //_swap的最终收款地址为当前路由合约，这样才可以通过WETH pair 合约 换出ETH
         _swap(amounts, path, address(this));
+        //从WETH合约取出 amouts[amounts.length-1]的ETH
         IWETH(WETH).withdraw(amounts[amounts.length - 1]);
+        //将amouts[amounts.length-1]的ETH 转入到to地址
         TransferHelper.safeTransferETH(to, amounts[amounts.length - 1]);
     }
 
     /**
-        @dev 根据精确token 交换更多的eth  给定输入 求输出eth数量
+        @dev 根据精确token 交换更多的eth  给定精确的token的输入 求ETH的输出
      */
     function swapExactTokensForETH(
         uint amountIn,
@@ -454,7 +491,7 @@ contract UniswapV2Router01 is IUniswapV2Router01 {
     }
 
     /** 
-        @dev 使用尽量少的ETH交换更多的token数量  给定输入 求输出
+        @dev 使用尽量少的ETH交换更多的token数量  给定精确的ETH的输出  求token的输入
      */
     function swapETHForExactTokens(
         uint amountOut,
