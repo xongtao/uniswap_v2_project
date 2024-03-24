@@ -295,6 +295,11 @@ contract UniswapV2Router01 is IUniswapV2Router01 {
     }
 
     // **** SWAP ****
+    //swap共有 6种 方法 
+    // Token --  Token
+    // ETH   --  Token
+    // Token --  ETH
+    //再分别 确认输入还是输出(Exact) 3*2 = 6
     // 要求初始金额已发送至第一对pair合约中
     /**
         @dev 私有的交换方法
@@ -382,18 +387,20 @@ contract UniswapV2Router01 is IUniswapV2Router01 {
             amounts[0] <= amountInMax,
             "UniswapV2Router: EXCESSIVE_INPUT_AMOUNT"
         );
-        //向 path[0],path[1]的pair合约 发送数量为amounts[0]的token path[0] 代币
+        //由msg.sender 向 path[0],path[1]的pair合约 发送数量为amounts[0]的token path[0] 代币
+        //此函数封装了回退方法 
         TransferHelper.safeTransferFrom(
-            path[0],
-            msg.sender,
-            UniswapV2Library.pairFor(factory, path[0], path[1]),
-            amounts[0]
+            path[0],  //token合约地址，表述输入token的类型
+            msg.sender,  //发送方
+            UniswapV2Library.pairFor(factory, path[0], path[1]),  //输出到 path[0,1]所对应的配对合约
+            amounts[0]   //转账数量
         );
         _swap(amounts, path, to);
     }
 
     /** 
         @dev 根据精确的eth交换token  给定精确的ETH输入  求token的输出
+        payable 表示能接受eth作为输入
      */
     function swapExactETHForTokens(
         uint amountOutMin,
@@ -417,8 +424,13 @@ contract UniswapV2Router01 is IUniswapV2Router01 {
             "UniswapV2Router: INSUFFICIENT_OUTPUT_AMOUNT"
         );
         //将数额amount[0] 的ETH 发送到weth合约
+        //IWETH(WETH).deposit WETH是一个合约地址，意思是将WETH转换为IWETH类型，从而调用IWETH接口的deposit方法
         IWETH(WETH).deposit{value: amounts[0]}();
-        //可以发送从WETH合约发送WETH发送到path[0],path[1]所对应的pair合约
+        //
+        //可以从WETH合约发送WETH发送到path[0],path[1]所对应的pair合约
+        //assert 用于检查函数内部调用出现的错误
+        //require 用于外部条件判断   
+        //两者都可以回滚
         assert(
             IWETH(WETH).transfer(
                 UniswapV2Library.pairFor(factory, path[0], path[1]),
@@ -448,14 +460,16 @@ contract UniswapV2Router01 is IUniswapV2Router01 {
             amounts[0] <= amountInMax,
             "UniswapV2Router: EXCESSIVE_INPUT_AMOUNT"
         );
-        //将数量为amounts[0]的path[0] token 发送到path[0],path[1]所对应的pair合约开始进行_swap
+        //将数量为amounts[0]的path[0] token 由msg.sneder发送到path[0],path[1]所对应的pair合约开始进行_swap
+        //实际还是从前往后调用  
         TransferHelper.safeTransferFrom(
-            path[0],
-            msg.sender,
+            path[0], //from地址
+            msg.sender, 
             UniswapV2Library.pairFor(factory, path[0], path[1]),
             amounts[0]
         );
-        //_swap的最终收款地址为当前路由合约，这样才可以通过WETH pair 合约 换出ETH
+        //_swap的最终收款地址为当前路由合约，_swap最后换给WETHpair合约的是WETH
+        //然后WETH pair合约中可以取出等量的ETH
         _swap(amounts, path, address(this));
         //从WETH合约取出 amouts[amounts.length-1]的ETH
         IWETH(WETH).withdraw(amounts[amounts.length - 1]);
@@ -473,7 +487,9 @@ contract UniswapV2Router01 is IUniswapV2Router01 {
         address to,
         uint deadline
     ) external override ensure(deadline) returns (uint[] memory amounts) {
+        //判断最后输出的token为weth
         require(path[path.length - 1] == WETH, "UniswapV2Router: INVALID_PATH");
+        //通过path数组和amountsIn，获取amounts数组
         amounts = UniswapV2Library.getAmountsOut(factory, amountIn, path);
         require(
             amounts[amounts.length - 1] >= amountOutMin,
@@ -486,12 +502,14 @@ contract UniswapV2Router01 is IUniswapV2Router01 {
             amounts[0]
         );
         _swap(amounts, path, address(this));
+        //区别于tokentotoken ,tokentoETH,最后一步需要通过WETH合约换成ETH
         IWETH(WETH).withdraw(amounts[amounts.length - 1]);
         TransferHelper.safeTransferETH(to, amounts[amounts.length - 1]);
     }
 
     /** 
         @dev 使用尽量少的ETH交换更多的token数量  给定精确的ETH的输出  求token的输入
+        payable 表示能接受eth作为输入
      */
     function swapETHForExactTokens(
         uint amountOut,

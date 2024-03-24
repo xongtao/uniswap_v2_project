@@ -38,6 +38,10 @@ library UniswapV2Library {
                 keccak256(
                     abi.encodePacked(
                         //一个常量前缀，用于确保编码的独特性。
+                        //常量前缀hex"ff"：这个常量是为了确保生成的是一个唯一的地址空间。在计算合约地址时，
+                        //hex"ff"作为一个固定的前缀，这有助于区分地址，并确保生成的地址是独特的。
+                        // factory地址：这是Uniswap工厂合约的地址。
+                        //它被包含在计算中，以确保每个Uniswap工厂合约生成的配对合约地址是独立的。
                         hex"ff",
                         factory,
                         //先生成字节码，再取哈希 即salt
