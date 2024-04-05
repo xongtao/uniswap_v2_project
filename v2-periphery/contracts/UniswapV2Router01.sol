@@ -402,7 +402,7 @@ contract UniswapV2Router01 is IUniswapV2Router01 {
         @dev 根据精确的eth交换token  给定精确的ETH输入  求token的输出
         payable 表示能接受eth作为输入
      */
-    function swapExactETHForTokens(
+    function  (
         uint amountOutMin,
         address[] calldata path,
         address to,
@@ -468,7 +468,7 @@ contract UniswapV2Router01 is IUniswapV2Router01 {
             UniswapV2Library.pairFor(factory, path[0], path[1]),
             amounts[0]
         );
-        //_swap的最终收款地址为当前路由合约，_swap最后换给WETHpair合约的是WETH
+        //_swap的最终收WETH的地址为当前路由合约
         //然后WETH pair合约中可以取出等量的ETH
         _swap(amounts, path, address(this));
         //从WETH合约取出 amouts[amounts.length-1]的ETH
@@ -501,8 +501,10 @@ contract UniswapV2Router01 is IUniswapV2Router01 {
             UniswapV2Library.pairFor(factory, path[0], path[1]),
             amounts[0]
         );
+        //_swap的最终收WETH的地址为当前路由合约
+        //然后WETH pair合约中可以取出等量的ETH
         _swap(amounts, path, address(this));
-        //区别于tokentotoken ,tokentoETH,最后一步需要通过WETH合约换成ETH
+        //区别于tokentotoken ,tokentoETH最后一步需要通过WETH合约换成ETH
         IWETH(WETH).withdraw(amounts[amounts.length - 1]);
         TransferHelper.safeTransferETH(to, amounts[amounts.length - 1]);
     }
@@ -537,6 +539,7 @@ contract UniswapV2Router01 is IUniswapV2Router01 {
             )
         );
         _swap(amounts, path, to);
+        //区别于之前的方法，因为是先转账，这个方法还需将未使用完的ETH返回给msg.sender
         if (msg.value > amounts[0])
             TransferHelper.safeTransferETH(msg.sender, msg.value - amounts[0]); // refund dust eth, if any
     }
